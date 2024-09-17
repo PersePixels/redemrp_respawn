@@ -108,6 +108,7 @@ RegisterCommand("revive", function(source, args, rawCommand)
     else
         TriggerServerEvent('redemrp_respawn:server:RequestRevive', source)
     end
+    ExecuteCommand("loadskin")
 end, false)
 
 RegisterNetEvent("redemrp_respawn:KillPlayer", function()
@@ -127,7 +128,7 @@ Citizen.CreateThread(function()
                 if revived == false then
 
                     if onPlayerDead == false then
-                        local DeathReason = "suicide"
+                        local DeathReason = "lumbago"
                         local PedKiller = Citizen.InvokeNative(0x93C8B64DEB84728C, PlayerPedId()) -- _GET_PED_SOURCE_OF_DEATH
                         local killername = GetPlayerName(PedKiller)
                         local DeathCauseHash = Citizen.InvokeNative(0x16FFE42AB2D2DC59, PlayerPedId()) -- _GET_PED_CAUSE_OF_DEATH
@@ -144,7 +145,7 @@ Citizen.CreateThread(function()
                             DeathReason = weaponName
                         end
 
-                        if DeathReason == "suicide" or DeathReason == "died" then
+                        if DeathReason == "lumbago" or DeathReason == "died" then
                             TriggerServerEvent('redemrp_respawn:server:LogPlayerDeath', { type = 1, player_id = GetPlayerServerId(PlayerId()), death_reason = DeathReason })
                         else
                             TriggerServerEvent('redemrp_respawn:server:LogPlayerDeath', { type = 2, player_id = GetPlayerServerId(PlayerId()), player_2_id = GetPlayerServerId(Killer), death_reason = DeathReason, weapon = Weapon })
@@ -197,8 +198,7 @@ Citizen.CreateThread(function()
                         ConfirmingRespawn = true
                     else
                         medicsAlerted = false
-                        
-                        respawn()
+                        ExecuteCommand("revive")
                         revived = false
                         onPlayerDead = false
                         TriggerServerEvent("redemrp_respawn:DeadTable", "remove")
@@ -401,58 +401,63 @@ local isDead = false
 
 local angleY = 0.0
 local angleZ = 0.0
-
+----------
 function StartDeathCam()
-    Citizen.CreateThread(function()
-        ClearFocus()
+    ClearFocus()
 
-        local playerPed = PlayerPedId()
+    local playerPed = PlayerPedId()
+    deadcam = Citizen.InvokeNative(0x40C23491CE83708E,"DEFAULT_SCRIPTED_CAMERA", GetEntityCoords(PlayerPedId()), 0, 0, 0, GetGameplayCamFov())
 
-        cam = CreateCamWithParams("DEFAULT_SCRIPTED_CAMERA", GetEntityCoords(playerPed), 0, 0, 0, GetGameplayCamFov())
-        --ShakeCam(cam, "DRUNK_SHAKE", 0.5)
-        SetCamActive(cam, true)
-        RenderScriptCams(true, true, 1000, true, false)
-    end)
+    SetCamActive(deadcam, true)
+    RenderScriptCams(true, true, 1000, true, false)
 end
-
+----------
 function EndDeathCam()
-    Citizen.CreateThread(function()
-        ClearFocus()
-        RenderScriptCams(false, false, 0, true, false)
-        DestroyCam(cam, false)
-        cam = nil
-    end)
+    ClearFocus()
+
+    RenderScriptCams(false, false, 0, true, false)
+    DestroyCam(deadcam, false)
+    
+    deadcam = nil
 end
 
-
+----------
 function ProcessCamControls()
-    Citizen.CreateThread(function()
-        local playerPed = PlayerPedId()
-        local playerCoords = GetEntityCoords(playerPed)
-        DisableFirstPersonCamThisFrame()
-        local newPos = ProcessNewPosition()
-        SetCamCoord(cam, newPos.x, newPos.y, newPos.z)
-        PointCamAtCoord(cam, playerCoords.x, playerCoords.y, playerCoords.z + 0.5)
-    end)
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(PlayerPedId())
+    -- disable 1st person as the 1st person camera can cause some glitches
+    Citizen.InvokeNative(0x05AB44D906738426)
+    
+    -- calculate new position
+    local newPos = ProcessNewPosition()
+
+    -- set coords of cam
+    Citizen.InvokeNative(0xF9EE7D419EE49DE6,deadcam, newPos.x, newPos.y, newPos.z)
+    
+    -- set rotation
+    Citizen.InvokeNative(0x948B39341C3A40C2,deadcam, playerCoords.x, playerCoords.y, playerCoords.z)
 end
 
+----------
 function ProcessNewPosition()
     local mouseX = 0.0
     local mouseY = 0.0
 
 
     -- keyboard
+    -- keyboard
     if (IsInputDisabled(0)) then
         -- rotation
-        mouseX = GetDisabledControlNormal(1, 0x4D8FB4C1) * 3.0
-        mouseY = GetDisabledControlNormal(1, 0xFDA83190) * 3.0
-
-        -- controller
+        mouseX = GetDisabledControlNormal(1, 0x6BC904FC) * 8.0
+        mouseY = GetDisabledControlNormal(1, 0x84574AE8) * 8.0
+        
+    -- controller
     else
         -- rotation
-        mouseX = GetDisabledControlNormal(1, 0x4D8FB4C1) * 1.0
-        mouseY = GetDisabledControlNormal(1, 0xFDA83190) * 1.0
+        mouseX = GetDisabledControlNormal(1, 0x6BC904FC) * 0.5
+        mouseY = GetDisabledControlNormal(1, 0x84574AE8) * 0.5
     end
+
     angleZ = angleZ - mouseX -- around Z axis (left / right)
     angleY = angleY + mouseY -- up / down
     -- limit up / down angle to 90°
@@ -461,16 +466,17 @@ function ProcessNewPosition()
     local pCoords = GetEntityCoords(PlayerPedId())
 
     local behindCam = {
-        x = pCoords.x + ((Cos(angleZ) * Cos(angleY)) + (Cos(angleY) * Cos(angleZ))) / 2 * (1.5 + 0.5),
-        y = pCoords.y + ((Sin(angleZ) * Cos(angleY)) + (Cos(angleY) * Sin(angleZ))) / 2 * (1.5 + 0.5),
-        z = pCoords.z + ((Sin(angleY))) * (1.5 + 0.5)
+        x = pCoords.x + ((Cos(angleZ) * Cos(angleY)) + (Cos(angleY) * Cos(angleZ))) / 2 * (0.5 + 0.5),
+        y = pCoords.y + ((Sin(angleZ) * Cos(angleY)) + (Cos(angleY) * Sin(angleZ))) / 2 * (0.5 + 0.5),
+        z = pCoords.z + ((Sin(angleY))) * (0.5 + 0.5)
     }
+
     local rayHandle = StartShapeTestRay(pCoords.x, pCoords.y, pCoords.z + 0.5, behindCam.x, behindCam.y, behindCam.z, -1, PlayerPedId(), 0)
     local a, hitBool, hitCoords, surfaceNormal, entityHit = GetShapeTestResult(rayHandle)
 
-    local maxRadius = 1.5
-    if (hitBool and Vdist(pCoords.x, pCoords.y, pCoords.z + 0.5, hitCoords) < 1.5 + 0.5) then
-        maxRadius = Vdist(pCoords.x, pCoords.y, pCoords.z + 0.5, hitCoords)
+    local maxRadius = 3.5
+    if (hitBool and Vdist(pCoords.x, pCoords.y, pCoords.z + 0.0, hitCoords) < 0.5 + 0.5) then
+        maxRadius = Vdist(pCoords.x, pCoords.y, pCoords.z + 0.0, hitCoords)
     end
 
     local offset = {
